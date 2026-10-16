@@ -1,0 +1,8 @@
+fastapi>=0.115,<1
+uvicorn>=0.34,<1
+numpy>=2.3,<3
+pandas>=2.3,<4
+pyarrow>=23,<24
+TA-Lib>=0.6.8,<0.7
+pytest>=8.4,<10
+httpx>=0.28,<1
