@@ -3,13 +3,7 @@ import pandas as pd
 import talib
 
 from .models import HLC_STRATEGIES, BacktestRequest
-
-
-def valid_hlc(high: np.ndarray, low: np.ndarray, close: np.ndarray) -> np.ndarray:
-    return (
-        np.isfinite(high) & np.isfinite(low) & np.isfinite(close)
-        & (low > 0) & (low <= close) & (close <= high)
-    )
+from .indicators import HLC_KINDS, custom_catalog, custom_factors, custom_groups, valid_hlc
 
 
 def factors(
@@ -20,6 +14,10 @@ def factors(
     low: np.ndarray | None = None,
 ) -> tuple[np.ndarray, dict[str, np.ndarray]]:
     """Run TA-Lib on observed bars; missing bars neither reset nor create signals."""
+    if config.strategy == "custom":
+        if config.custom_strategy is None or high is None or low is None or high.shape != close.shape or low.shape != close.shape:
+            raise ValueError("自定义策略缺少规则或高低价数据")
+        return custom_factors(close, high, low, config.custom_strategy)
     valid = np.isfinite(close) & (close > 0)
     if config.strategy in HLC_STRATEGIES:
         if high is None or low is None or high.shape != close.shape or low.shape != close.shape:
@@ -251,10 +249,17 @@ def run_backtest(data: dict[str, pd.DataFrame], config: BacktestRequest) -> dict
         warnings.append(f"以下证券区间内没有有效复权开盘价，子账户保留现金：{', '.join(inactive)}。")
     if missing:
         warnings.append(f"区间内有 {missing} 个缺失复权收盘值；缺失时使用当日有效开盘或最近可用价格估值。")
-    if config.strategy in HLC_STRATEGIES:
+    custom_hlc = config.strategy == "custom" and config.custom_strategy is not None and any(
+        spec.kind in HLC_KINDS for _, spec in custom_catalog(config.custom_strategy)
+    )
+    if config.strategy in HLC_STRATEGIES or custom_hlc:
         invalid_bars = int((~valid_hlc(highs[mask], lows[mask], closes[mask])).sum())
         if invalid_bars:
-            warnings.append(f"该策略需要完整高低收盘价；区间内 {invalid_bars} 个缺失或不合法行情被跳过，不生成新信号。")
+            warnings.append(
+                f"自定义策略的高低价指标跳过 {invalid_bars} 个缺失或不合法行情；其他条件仍独立计算。"
+                if custom_hlc else
+                f"该策略需要完整高低收盘价；区间内 {invalid_bars} 个缺失或不合法行情被跳过，不生成新信号。"
+            )
     counts = data["num_trades"].loc[mask]
     if counts.iloc[-1].isna().any():
         warnings.append("最后交易日存在 num_trades 缺失；成交笔数仅作数据检查，不用于开盘撮合。")
@@ -281,4 +286,5 @@ def run_backtest(data: dict[str, pd.DataFrame], config: BacktestRequest) -> dict
         "curve": curve, "trades": trades,
         "monthly": [{"month": date.strftime("%Y-%m"), "return": float(value)} for date, value in monthly.items()],
         "indicator_symbol": config.symbols[0], "indicators": detail, "warnings": warnings,
+        "indicator_groups": custom_groups(config.custom_strategy) if config.strategy == "custom" and config.custom_strategy else [],
     }

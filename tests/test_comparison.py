@@ -94,6 +94,32 @@ def test_no_trades_is_not_treated_as_strategy_success(sample):
     assert macd["validation"]["status"] == "warning"
 
 
+def test_validation_handles_split_adjustments(sample):
+    data, config = sample
+    split = {name: frame.copy() for name, frame in data.items()}
+    for field in ("open", "high", "low", "close"):
+        split[field].iloc[90:] /= 2
+    split["cumadj"].iloc[90:] *= 2
+    original, adjusted = run_comparison(data, config), run_comparison(split, config)
+    assert adjusted["summary"]["failed"] == 0
+    for before, after in zip(original["results"], adjusted["results"]):
+        assert before["metrics"] == after["metrics"]
+        assert before["validation"] == after["validation"]
+
+
+def test_ledger_valuation_uses_last_available_mark(sample):
+    data, config = sample
+    missing = {name: frame.copy() for name, frame in data.items()}
+    for field in ("open", "close", "high", "low"):
+        missing[field].iloc[-2:] = np.nan
+    report = run_comparison(missing, config)
+    assert report["summary"]["failed"] == 0
+    assert all(
+        next(check for check in row["validation"]["checks"] if check["id"] == "ledger")["status"] == "passed"
+        for row in report["results"]
+    )
+
+
 @pytest.mark.parametrize("values", [
     {"strategy": "rsi", "fast": 40, "slow": 20},
     {"strategy": "macd", "donchian_entry": 5, "donchian_exit": 10},

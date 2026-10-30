@@ -196,7 +196,8 @@ def run_comparison(data: dict[str, pd.DataFrame], config: ComparisonRequest) -> 
     rows = []
     benchmark = None
     period = None
-    for strategy in STRATEGIES:
+    candidates = (*STRATEGIES, "custom") if config.custom_strategy else STRATEGIES
+    for strategy in candidates:
         strategy_config = BacktestRequest.model_validate({**config.model_dump(), "strategy": strategy})
         result = run_backtest(data, strategy_config)
         if benchmark is None:

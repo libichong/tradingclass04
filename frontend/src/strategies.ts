@@ -135,6 +135,13 @@ export const strategies: StrategyDefinition[] = [
       { key: 'donchian_exit', label: '退出周期 M', min: 2, max: 250 },
     ],
   },
+  {
+    id: 'custom', name: '自定义规则策略', tag: '自定义', priceOverlay: false,
+    description: '在策略设计器中组合 TA-Lib 指标、阈值和交叉信号，再保存并应用。',
+    rule: '买入与卖出各支持最多 6 个 AND / OR 条件；同时触发时卖出优先。',
+    parameters: [],
+  },
 ]
 
 export const strategyGroups = [...new Set(strategies.map(strategy => strategy.tag))]
+export const availableStrategies = (config: Config) => strategies.filter(strategy => strategy.id !== 'custom' || config.custom_strategy !== null)
